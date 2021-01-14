@@ -1,0 +1,76 @@
+---
+- name: install nginx LB
+  hosts: localhost
+  gather_facts: fasle
+  vars:
+    vcenter_username: "{{ gen1_user }}"
+    vcenter_password: "{{ gen1_pword }}"
+
+  tasks:
+  - name: Generate new hostname
+    set_fact:
+      newname: MyApp-{{ lookup('pipe', 'date +%Y%m%d%H%M') }}
+
+  - name: Deploy New Server
+    vmware_guest:
+      hostname: "{{ vcenter_hostname }}"
+      username: "{{ vcenter_username }}"
+      password: "{{ vcenter_password }}"
+      validate_certs: no
+      datacenter: "{{ vCenterDatacenter }}"
+      cluster: "{{ vCenterCluster }}"
+      folder: "{{ vCenterFolder }}"
+      name: "{{ newname }}"
+      template: "{{ vCenterCloneSource }}"
+      snapshot_src: "{{ VCenterCloneSnapshot }}"
+      linked_clone: True
+      state: poweredon
+      wait_for_ip_address: true
+      validate_certs: False
+      hardware:
+        memory_mb: "{{ hardware.memory_mb }}"
+        num_cpus: "{{ hardware.num_cpus }}"
+      networks:
+      - name: "{{ vCenterPortGroup }}"
+    register: newvm
+
+  - name: Add Host to Tower Inventory
+    uri:
+      url:  https://{{ tower_instance }}/api/v2/hosts/
+      method: POST
+      user: "{{ gen2_user }}"
+      password: "{{ gen2_pword }}"
+      body: "{{ lookup('template','app-test-tower_host.json.j2') }}"
+      body_format: json
+      validate_certs: False
+      force_basic_auth: yes
+      status_code:
+        - 200
+        - 201
+        - 400
+    register: response
+    changed_when: response.status == 201
+
+  - name: Associate host to group
+    uri:
+      url:  https://{{ tower_instance }}/api/v2/groups/7/hosts/
+      method: POST
+      user: "{{ gen2_user }}"
+      password: "{{ gen2_pword }}"
+      body: '{ "id": {{ response.json.id}} }'
+      body_format: json
+      validate_certs: False
+      force_basic_auth: yes
+      status_code:
+        - 200
+        - 204
+        - 400
+    register: response2
+    changed_when: response2.status == 204
+    when: response.changed
+
+  - set_stats:
+      data:
+        newip: "{{ newvm.instance.ipv4 }}"
+        newuuid: "{{ newvm.instance.hw_product_uuid }}"
+        newvmname: "{{ newname }}"

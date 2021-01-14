@@ -1,0 +1,28 @@
+---
+- name: install nginx
+  hosts: "{{ newvmname }}"
+  gather_facts: fasle
+  vars:
+  tasks:
+  - name: add firewall port
+    firewalld:
+      port: 80/tcp
+      permanent: true
+      state: enabled
+    notify: 
+    - restart firewalld
+
+  - name: install nginx
+    yum:
+      name: nginx
+      state: latest
+
+  - name: Disable SELinux
+    selinux:
+      state: disabled
+
+  handlers:
+  - name: restart firewalld
+    service:
+      name: firewalld
+      state: restarted

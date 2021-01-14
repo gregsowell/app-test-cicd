@@ -1,0 +1,30 @@
+---
+- name: configure nginx web server
+  hosts: "{{ newvmname }}"
+  gather_facts: fasle
+  vars:
+
+  tasks:
+  - name: Verify that app index file exists
+    stat:
+      path: /var/www/html/index.html
+    register: index
+    failed_when: not index.stat.exists
+  
+  - name: Get Website HTML
+    uri:
+      url:  http://localhost/
+      method: GET
+      return_content: yes
+      status_code:
+        - 200
+        - 201
+        - 400
+    register: webpage
+
+  - name: Check Website Content
+    assert:
+      msg: Website HTML does not match
+      that:
+        - "'test application' in webpage.content"
+      quiet: yes

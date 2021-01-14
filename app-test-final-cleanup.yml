@@ -1,0 +1,141 @@
+---
+- name: Final cleanup where old app is deleted and new is renamed
+  hosts: localhost
+  gather_facts: fasle
+  vars:
+    vcenter_username: "{{ gen1_user }}"
+    vcenter_password: "{{ gen1_pword }}"
+    tower_username: "{{ gen2_user }}"
+    tower_password: "{{ gen2_pword }}"
+
+  tasks:
+  - name: Destroy Old Server
+    vmware_guest:
+      hostname: "{{ vcenter_hostname }}"
+      username: "{{ vcenter_username }}"
+      password: "{{ vcenter_password }}"
+      datacenter: "{{ vCenterDatacenter }}"
+      cluster: "{{ vCenterCluster }}"
+      folder: "{{ vCenterFolder }}"
+      name: MyApp
+      state: absent
+      validate_certs: no
+      force: yes
+    ignore_errors: yes
+
+  - name: Rename "{{ newvmname }}" to MyApp
+    vmware_guest:
+      hostname: "{{ vcenter_hostname }}"
+      username: "{{ vcenter_username }}"
+      password: "{{ vcenter_password }}"
+      datacenter: "{{ vCenterDatacenter }}"
+      folder: "{{ vCenterFolder }}"
+      validate_certs: False
+      cluster: "{{ vCenterCluster }}"
+      uuid: "{{ newuuid }}"
+      name: MyApp
+
+  - name: Get Tower Host for "{{ newvmname }}"
+    uri:
+      url:  https://{{ tower_instance }}/api/v2/hosts/?name={{ newvmname }}
+      method: GET
+      user: "{{ tower_username }}"
+      password: "{{ tower_password }}"
+      validate_certs: False
+      force_basic_auth: yes
+      status_code:
+        - 200
+        - 201
+        - 400
+    register: response
+    ignore_errors: yes
+
+  - name: Remove Tower Host for "{{ newvmname }}"
+    uri:
+      url:  https://{{ tower_instance }}/api/v2/hosts/{{ response.json.results[0].id }}/
+      method: DELETE
+      user: "{{ tower_username }}"
+      password: "{{ tower_password }}"
+      validate_certs: False
+      force_basic_auth: yes
+      status_code:
+        - 200
+        - 201
+        - 202
+        - 204
+        - 400
+        - 404
+    register: response2
+    when: response.json.count > 0
+    changed_when: response2.status == 204
+    ignore_errors: yes
+
+  - name: Get Tower Host for MyApp
+    uri:
+      url:  https://{{ tower_instance }}/api/v2/hosts/?name=MyApp
+      method: GET
+      user: "{{ tower_username }}"
+      password: "{{ tower_password }}"
+      validate_certs: False
+      force_basic_auth: yes
+      status_code:
+        - 200
+        - 201
+        - 400
+    register: response
+    ignore_errors: yes
+
+  - name: Remove Tower Host for MyApp
+    uri:
+      url:  https://{{ tower_instance }}/api/v2/hosts/{{ response.json.results[0].id }}/
+      method: DELETE
+      user: "{{ tower_username }}"
+      password: "{{ tower_password }}"
+      validate_certs: False
+      force_basic_auth: yes
+      status_code:
+        - 200
+        - 201
+        - 202
+        - 204
+        - 400
+        - 404
+    register: response2
+    when: response.json.count > 0
+    changed_when: response2.status == 204
+    ignore_errors: yes
+
+  - name: Add MyApp Host to Tower Inventory
+    uri:
+      url:  https://{{ tower_instance }}/api/v2/hosts/
+      method: POST
+      user: "{{ gen2_user }}"
+      password: "{{ gen2_pword }}"
+      body: "{{ lookup('template','app-test-tower_host_rename.json.j2') }}"
+      body_format: json
+      validate_certs: False
+      force_basic_auth: yes
+      status_code:
+        - 200
+        - 201
+        - 400
+    register: response
+    changed_when: response.status == 201
+
+  - name: Associate host to group
+    uri:
+      url:  https://{{ tower_instance }}/api/v2/groups/7/hosts/
+      method: POST
+      user: "{{ gen2_user }}"
+      password: "{{ gen2_pword }}"
+      body: '{ "id": {{ response.json.id}} }'
+      body_format: json
+      validate_certs: False
+      force_basic_auth: yes
+      status_code:
+        - 200
+        - 204
+        - 400
+    register: response2
+    changed_when: response2.status == 204
+    when: response.changed

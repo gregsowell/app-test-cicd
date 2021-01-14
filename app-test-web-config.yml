@@ -1,0 +1,36 @@
+---
+- name: configure nginx web server
+  hosts: "{{ newvmname }}"
+  gather_facts: fasle
+  vars:
+
+  tasks:
+  - name: install git
+    yum:
+      name: 
+        - git
+      state: present
+
+  - name: install config file
+    template:
+      src: app-test-nginx-web.conf.j2
+      dest: /etc/nginx/nginx.conf
+    notify:
+    - restart nginx
+
+  - name: Cleanout web folder
+    file:
+      path: /var/www/html/
+      state: absent
+
+  - name: pull the web files
+    git:
+      repo: https://github.com/gregsowell/app-test-html.git
+      dest: /var/www/html/
+
+  handlers:
+  - name: restart nginx
+    service:
+      name: nginx
+      state: restarted
+      enabled: yes
