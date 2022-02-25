@@ -74,3 +74,13 @@
         newip: "{{ newvm.instance.ipv4 }}"
         newuuid: "{{ newvm.instance.hw_product_uuid }}"
         newvmname: "{{ newname }}"
+        
+  
+  - name: Make sure the host key doesn't already exist
+    lineinfile:
+      path: /var/lib/awx/.ssh/known_hosts
+      state: absent
+#      regexp: "^{{ ansible_host }}"
+      regexp: "^{{ newvm.instance.ipv4 }}"
+    delegate_to: localhost
+    become: true
